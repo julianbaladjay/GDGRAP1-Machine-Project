@@ -17,6 +17,269 @@ float rotate_y_mod = 1.f;
 float scale_mod = 1.f;
 float zoom_mod = -5.f;
 
+class Model {
+public:
+    Model(const std::string& path) {
+        loadModel(path);
+        initializeBuffers();
+    }
+
+    void setPosition(float posX, float posY, float posZ) {
+        position = glm::vec3(posX, posY, posZ);
+    }
+
+    void setRotation(float rotX, float rotY, float rotZ) {
+        rotation = glm::vec3(rotX, rotY, rotZ);
+    }
+
+    void setScale(float scaleX, float scaleY, float scaleZ) {
+        scale = glm::vec3(scaleX, scaleY, scaleZ);
+    }
+
+    void initializeVertexData() {
+        for (int i = 0; i < shapes[0].mesh.indices.size(); i++) {
+            tinyobj::index_t vData = shapes[0].mesh.indices[i];
+
+            // Push x, y, z positions
+            fullVertexData.push_back(attributes.vertices[vData.vertex_index * 3]);
+            fullVertexData.push_back(attributes.vertices[vData.vertex_index * 3 + 1]);
+            fullVertexData.push_back(attributes.vertices[vData.vertex_index * 3 + 2]);
+
+            // Push x, y, z normals
+            fullVertexData.push_back(attributes.normals[vData.normal_index * 3]);
+            fullVertexData.push_back(attributes.normals[vData.normal_index * 3 + 1]);
+            fullVertexData.push_back(attributes.normals[vData.normal_index * 3 + 2]);
+
+            // Push u, v texture coordinates
+            fullVertexData.push_back(attributes.texcoords[vData.texcoord_index * 2]);
+            fullVertexData.push_back(attributes.texcoords[vData.texcoord_index * 2 + 1]);
+
+            // Push tangents and bitangents
+            fullVertexData.push_back(tangents[i].x);
+            fullVertexData.push_back(tangents[i].y);
+            fullVertexData.push_back(tangents[i].z);
+            fullVertexData.push_back(bitangents[i].x);
+            fullVertexData.push_back(bitangents[i].y);
+            fullVertexData.push_back(bitangents[i].z);
+        }
+    }
+
+    void draw() {
+        glBindVertexArray(VAO);
+        glDrawArrays(GL_TRIANGLES, 0, fullVertexData.size() / 14);
+        glBindVertexArray(0);
+    }
+
+private:
+
+    void loadModel(const std::string& path) {
+        std::string warning, error;
+        bool success = tinyobj::LoadObj(
+            &attributes,
+            &shapes,
+            &material,
+            &warning,
+            &error,
+            path.c_str()
+        );
+
+        if (!success) {
+            std::cerr << "Error loading model: " << error << std::endl;
+            return;
+        }
+    }
+
+    void extractTangentsAndBitangents() {
+
+        for (int i = 0; i < shapes[0].mesh.indices.size(); i += 3) {
+            //get vertex data for triangle
+            tinyobj::index_t vData1 = shapes[0].mesh.indices[i];
+            tinyobj::index_t vData2 = shapes[0].mesh.indices[i + 1];
+            tinyobj::index_t vData3 = shapes[0].mesh.indices[i + 2];
+
+            //position of vertex 1
+            glm::vec3 v1 = glm::vec3(
+                attributes.vertices[vData1.vertex_index * 3],
+                attributes.vertices[(vData1.vertex_index * 3) + 1],
+                attributes.vertices[(vData1.vertex_index * 3) + 2]
+            );
+
+            //position of vertex 2
+            glm::vec3 v2 = glm::vec3(
+                attributes.vertices[vData2.vertex_index * 3],
+                attributes.vertices[(vData2.vertex_index * 3) + 1],
+                attributes.vertices[(vData2.vertex_index * 3) + 2]
+            );
+
+            //position of vertex 3
+            glm::vec3 v3 = glm::vec3(
+                attributes.vertices[vData3.vertex_index * 3],
+                attributes.vertices[(vData3.vertex_index * 3) + 1],
+                attributes.vertices[(vData3.vertex_index * 3) + 2]
+            );
+
+            //uv of vertex 1
+            glm::vec2 uv1 = glm::vec2(
+                attributes.texcoords[(vData1.texcoord_index * 2)],
+                attributes.texcoords[(vData1.texcoord_index * 2) + 1]
+            );
+
+            //uv of vertex 2
+            glm::vec2 uv2 = glm::vec2(
+                attributes.texcoords[(vData2.texcoord_index * 2)],
+                attributes.texcoords[(vData2.texcoord_index * 2) + 1]
+            );
+
+            //uv of vertex 3
+            glm::vec2 uv3 = glm::vec2(
+                attributes.texcoords[(vData3.texcoord_index * 2)],
+                attributes.texcoords[(vData3.texcoord_index * 2) + 1]
+            );
+
+            //edges of triangle: position delta
+            glm::vec3 deltaPos1 = v2 - v1;
+            glm::vec3 deltaPos2 = v3 - v1;
+
+            //uv delta
+            glm::vec2 deltaUV1 = uv2 - uv1;
+            glm::vec2 deltaUV2 = uv3 - uv1;
+
+            float r = 1.0f / ((deltaUV1.x * deltaUV2.y) - (deltaUV1.y * deltaUV2.x));
+            //tangent (T)
+            glm::vec3 tangent = (deltaPos1 * deltaUV2.y - deltaPos2 * deltaUV1.y) * r;
+            //bitangent (B)
+            glm::vec3 bitangent = (deltaPos2 * deltaUV1.x - deltaPos1 * deltaUV2.x) * r;
+
+            //push back tangent and bitangent three times
+            tangents.push_back(tangent);
+            tangents.push_back(tangent);
+            tangents.push_back(tangent);
+
+            bitangents.push_back(bitangent);
+            bitangents.push_back(bitangent);
+            bitangents.push_back(bitangent);
+        }
+    }
+
+    void initializeBuffers() {
+        // Call extractTangentsAndBitangents to populate tangents and bitangents
+        extractTangentsAndBitangents();
+        // Initialize vertex data
+        initializeVertexData();
+        // Generate VAO and VBO IDs
+        glGenVertexArrays(1, &VAO);
+        glGenBuffers(1, &VBO);
+
+        // Bind the VAO
+        glBindVertexArray(VAO);
+
+        // Bind the VBO and send vertex data to the GPU
+        glBindBuffer(GL_ARRAY_BUFFER, VBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * fullVertexData.size(), fullVertexData.data(), GL_DYNAMIC_DRAW);
+
+        // Specify vertex attributes layout
+        glVertexAttribPointer(
+            0, //vertex position
+            3, // x y z
+            GL_FLOAT, //data type of array
+            GL_FALSE,
+            //vertex data has 8 floats
+            //X,Y,Z,3 normals, U,V
+            14 * sizeof(float), //size of vertex data in bytes
+            (void*)0
+        );
+        //enable vertices, this time for skybox
+        glEnableVertexAttribArray(0);
+
+        //normal starts at index 3
+        GLintptr normalPtr = 3 * sizeof(float);
+
+        glVertexAttribPointer(
+            1, //normals
+            3, // x y z
+            GL_FLOAT, //data type of array
+            GL_FALSE,
+            //vertex data has 8 floats
+            //X,Y,Z,3 normals, U,V
+            14 * sizeof(float), //size of vertex data in bytes
+            (void*)normalPtr
+        );
+        //enable normals
+        glEnableVertexAttribArray(1);
+
+        //uv starts at index 6
+        GLintptr uvPtr = 6 * sizeof(float);
+
+        //get uv data from array
+        glVertexAttribPointer(
+            2, //uv coords
+            2, // u v
+            GL_FLOAT, //data type of array
+            GL_FALSE,
+            //vertex data has 8 floats
+            //X,Y,Z,3 normals, U,V
+            14 * sizeof(float), //size of vertex data in bytes
+            //offset
+            (void*)uvPtr
+        );
+
+        //enable textures
+        glEnableVertexAttribArray(2);
+
+        //tangent starts at index 8
+        GLintptr tangentPtr = 8 * sizeof(float);
+
+        glVertexAttribPointer(
+            3, //tangent
+            3, // T (xyz)
+            GL_FLOAT, //data type of array
+            GL_FALSE,
+            14 * sizeof(float), //size of vertex data in bytes
+            //offset
+            (void*)tangentPtr
+        );
+        //enable tangent
+        glEnableVertexAttribArray(3);
+
+        //bitangent starts at index 11
+        GLintptr bitangentPtr = 11 * sizeof(float);
+
+        glVertexAttribPointer(
+            4, //bitangent
+            3, // T (xyz)
+            GL_FLOAT, //data type of array
+            GL_FALSE,
+            14 * sizeof(float), //size of vertex data in bytes
+            //offset
+            (void*)bitangentPtr
+        );
+        //enable bitangent
+        glEnableVertexAttribArray(4);
+
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glBindVertexArray(0);
+
+        // Unbind the VBO and VAO
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glBindVertexArray(0);
+    }
+
+
+    std::vector<tinyobj::shape_t> shapes;
+    std::vector<tinyobj::material_t> material;
+    tinyobj::attrib_t attributes;
+    std::vector<GLfloat> fullVertexData;
+    std::vector<glm::vec3> tangents;
+    std::vector<glm::vec3> bitangents;
+
+    glm::vec3 position;
+    glm::vec3 rotation;
+    glm::vec3 scale;
+
+    GLuint VAO, VBO;
+    
+};
+
 void Key_Callback(GLFWwindow* window,
     int key, //keycode of press
     int scancode, //physical position of press
@@ -373,42 +636,6 @@ int main(void)
 
     glLinkProgram(skyShaderProg);
 
-    std::string path = "3D/plane.obj";
-    std::vector<tinyobj::shape_t> shapes;
-    std::vector<tinyobj::material_t> material;
-    std::string warning, error;
-
-    tinyobj::attrib_t attributes;
-
-    bool success = tinyobj::LoadObj(
-        &attributes,
-        &shapes,
-        &material,
-        &warning,
-        &error,
-        path.c_str()
-    );
-
-    GLfloat UV[]{
-        0.f, 1.f,
-        0.f, 0.f,
-        1.f, 1.f,
-        1.f, 0.f,
-        1.f, 1.f,
-        1.f, 0.f,
-        0.f, 1.f,
-        0.f, 0.f
-    };
-
-    /*
-  7--------6
- /|       /|
-4--------5 |
-| |      | |
-| 3------|-2
-|/       |/
-0--------1
-*/
 //Vertices for the cube
     float skyboxVertices[]{
         -1.f, -1.f, 1.f, //0
@@ -442,158 +669,10 @@ int main(void)
         6,2,3
     };
 
-    //get EBO indices array
-    std::vector<GLuint> mesh_indices;
-    for (int i = 0; i < shapes[0].mesh.indices.size(); i++) {
-        mesh_indices.push_back(
-            shapes[0].mesh.indices[i].vertex_index
-        );
-    }
-
-    //vector to hold tangents
-    std::vector<glm::vec3> tangents;
-    //vector to hold bitangents
-    std::vector<glm::vec3> bitangents;
-
-    for (int i = 0; i < shapes[0].mesh.indices.size(); i += 3) {
-        //get vertex data for triangle
-        tinyobj::index_t vData1 = shapes[0].mesh.indices[i];
-        tinyobj::index_t vData2 = shapes[0].mesh.indices[i + 1];
-        tinyobj::index_t vData3 = shapes[0].mesh.indices[i + 2];
-
-        //position of vertex 1
-        glm::vec3 v1 = glm::vec3(
-            attributes.vertices[vData1.vertex_index * 3],
-            attributes.vertices[(vData1.vertex_index * 3) + 1],
-            attributes.vertices[(vData1.vertex_index * 3) + 2]
-        );
-
-        //position of vertex 2
-        glm::vec3 v2 = glm::vec3(
-            attributes.vertices[vData2.vertex_index * 3],
-            attributes.vertices[(vData2.vertex_index * 3) + 1],
-            attributes.vertices[(vData2.vertex_index * 3) + 2]
-        );
-
-        //position of vertex 3
-        glm::vec3 v3 = glm::vec3(
-            attributes.vertices[vData3.vertex_index * 3],
-            attributes.vertices[(vData3.vertex_index * 3) + 1],
-            attributes.vertices[(vData3.vertex_index * 3) + 2]
-        );
-
-        //uv of vertex 1
-        glm::vec2 uv1 = glm::vec2(
-            attributes.texcoords[(vData1.texcoord_index * 2)],
-            attributes.texcoords[(vData1.texcoord_index * 2) + 1]
-        );
-
-        //uv of vertex 2
-        glm::vec2 uv2 = glm::vec2(
-            attributes.texcoords[(vData2.texcoord_index * 2)],
-            attributes.texcoords[(vData2.texcoord_index * 2) + 1]
-        );
-
-        //uv of vertex 3
-        glm::vec2 uv3 = glm::vec2(
-            attributes.texcoords[(vData3.texcoord_index * 2)],
-            attributes.texcoords[(vData3.texcoord_index * 2) + 1]
-        );
-
-        //edges of triangle: position delta
-        glm::vec3 deltaPos1 = v2 - v1;
-        glm::vec3 deltaPos2 = v3 - v1;
-
-        //uv delta
-        glm::vec2 deltaUV1 = uv2 - uv1;
-        glm::vec2 deltaUV2 = uv3 - uv1;
-
-        float r = 1.0f / ((deltaUV1.x * deltaUV2.y) - (deltaUV1.y * deltaUV2.x));
-        //tangent (T)
-        glm::vec3 tangent = (deltaPos1 * deltaUV2.y - deltaPos2 * deltaUV1.y) * r;
-        //bitangent (B)
-        glm::vec3 bitangent = (deltaPos2 * deltaUV1.x - deltaPos1 * deltaUV2.x) * r;
-
-        //push back tangent and bitangent three times
-        tangents.push_back(tangent);
-        tangents.push_back(tangent);
-        tangents.push_back(tangent);
-
-        bitangents.push_back(bitangent);
-        bitangents.push_back(bitangent);
-        bitangents.push_back(bitangent);
-    }
-
-    //initialize array of vertex data
-    std::vector<GLfloat> fullVertexData;
-    for (int i = 0; i < shapes[0].mesh.indices.size(); i++) {
-        tinyobj::index_t vData = shapes[0].mesh.indices[i];
-
-        //push x position
-        fullVertexData.push_back(
-            attributes.vertices[(vData.vertex_index * 3)]
-        );
-        //push y position
-        fullVertexData.push_back(
-            attributes.vertices[(vData.vertex_index * 3) + 1]
-        );
-        //push z position
-        fullVertexData.push_back(
-            attributes.vertices[(vData.vertex_index * 3) + 2]
-        );
-        //push x normals
-        fullVertexData.push_back(
-            attributes.normals[(vData.normal_index * 3)]
-        );
-        //push y normals
-        fullVertexData.push_back(
-            attributes.normals[(vData.normal_index * 3) + 1]
-        );
-        //push z normals
-        fullVertexData.push_back(
-            attributes.normals[(vData.normal_index * 3) + 2]
-        );
-        //push u position
-        fullVertexData.push_back(
-            attributes.texcoords[(vData.texcoord_index * 2)]
-        );
-        //push v position
-        fullVertexData.push_back(
-            attributes.texcoords[(vData.texcoord_index * 2) + 1]
-        );
-
-        //push tangent and bitangent to vertex data
-        fullVertexData.push_back(
-            tangents[i].x
-        );
-
-        fullVertexData.push_back(
-            tangents[i].y
-        );
-
-        fullVertexData.push_back(
-            tangents[i].z
-        );
-
-        fullVertexData.push_back(
-            bitangents[i].x
-        );
-
-        fullVertexData.push_back(
-            bitangents[i].y
-        );
-
-        fullVertexData.push_back(
-            bitangents[i].z
-        );
-    }
-
-    GLuint VAO, VBO, EBO, VBO_UV;
+    GLuint VAO, VBO;
     //Initialize VAO and VBO
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
-    //glGenBuffers(1, &VBO_UV);
-    //glGenBuffers(1, &EBO);
 
     unsigned int skyVAO, skyVBO, skyEBO;
     glGenVertexArrays(1, &skyVAO);
@@ -615,144 +694,6 @@ int main(void)
 
     //tell opengl to use shader for VAOs below
     glUseProgram(shaderProg);
-
-    glBindVertexArray(VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-
-    //add in vertex data
-    glBufferData(
-        GL_ARRAY_BUFFER,
-        //size of array in bytes
-        sizeof(GLfloat) * fullVertexData.size(),
-        //data of array
-        fullVertexData.data(),
-        GL_DYNAMIC_DRAW
-    );
-
-    glVertexAttribPointer(
-        0, //vertex position
-        3, // x y z
-        GL_FLOAT, //data type of array
-        GL_FALSE,
-        //vertex data has 8 floats
-        //X,Y,Z,3 normals, U,V
-        14 * sizeof(float), //size of vertex data in bytes
-        (void*)0
-    );
-    //enable vertices, this time for skybox
-    glEnableVertexAttribArray(0);
-
-    //normal starts at index 3
-    GLintptr normalPtr = 3 * sizeof(float);
-
-    glVertexAttribPointer(
-        1, //normals
-        3, // x y z
-        GL_FLOAT, //data type of array
-        GL_FALSE,
-        //vertex data has 8 floats
-        //X,Y,Z,3 normals, U,V
-        14 * sizeof(float), //size of vertex data in bytes
-        (void*)normalPtr
-    );
-    //enable normals
-    glEnableVertexAttribArray(1);
-
-    //uv starts at index 6
-    GLintptr uvPtr = 6 * sizeof(float);
-
-    //get uv data from array
-    glVertexAttribPointer(
-        2, //uv coords
-        2, // u v
-        GL_FLOAT, //data type of array
-        GL_FALSE,
-        //vertex data has 8 floats
-        //X,Y,Z,3 normals, U,V
-        14 * sizeof(float), //size of vertex data in bytes
-        //offset
-        (void*)uvPtr
-    );
-
-    //enable textures
-    glEnableVertexAttribArray(2);
-
-    //tangent starts at index 8
-    GLintptr tangentPtr = 8 * sizeof(float);
-
-    glVertexAttribPointer(
-        3, //tangent
-        3, // T (xyz)
-        GL_FLOAT, //data type of array
-        GL_FALSE,
-        14 * sizeof(float), //size of vertex data in bytes
-        //offset
-        (void*)tangentPtr
-    );
-    //enable tangent
-    glEnableVertexAttribArray(3);
-
-    //bitangent starts at index 11
-    GLintptr bitangentPtr = 11 * sizeof(float);
-
-    glVertexAttribPointer(
-        4, //bitangent
-        3, // T (xyz)
-        GL_FLOAT, //data type of array
-        GL_FALSE,
-        14 * sizeof(float), //size of vertex data in bytes
-        //offset
-        (void*)bitangentPtr
-    );
-    //enable bitangent
-    glEnableVertexAttribArray(4);
-
-    /*
-    //VBO
-    glBufferData(GL_ARRAY_BUFFER,
-        sizeof(GL_FLOAT) * attributes.vertices.size(), //bytes
-        &attributes.vertices[0],         // == attributes.vertices.data()
-        GL_STATIC_DRAW);
-
-    glVertexAttribPointer(
-        0, //0 pos, 1 tex, 2 norms
-        3, //xyz
-        GL_FLOAT,
-        GL_FALSE,
-        3 * sizeof(GL_FLOAT),
-        (void*)0
-    ); */
-
-    /*
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-        sizeof(GLuint) * mesh_indices.size(),
-        &mesh_indices[0],
-        GL_STATIC_DRAW);*/
-
-        /*
-        //bind uv
-        glBindBuffer(GL_ARRAY_BUFFER, VBO_UV);
-        //buffer data for uv
-        glBufferData(GL_ARRAY_BUFFER,
-            sizeof(GLfloat)* (sizeof(UV) / sizeof(UV[0])), //float * size of uv array
-            &UV[0], //uv array
-            GL_DYNAMIC_DRAW); */
-
-            //interpret uv array
-            /* glVertexAttribPointer(
-                2, //2 for uv coords
-                2, //UV
-                GL_FLOAT, //type of array
-                GL_FALSE,
-                2 * sizeof(float), //every 2 index
-                (void*)0
-            );*/
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
     float x, y, z;
     x = y = z = 0.0f;
@@ -819,12 +760,6 @@ int main(void)
 
     glm::mat4 viewMatrix = cameraOrientation * cameraPositionMatrix;
 
-    /*glm::mat4 viewMatrix = glm::lookAt(
-        glm::vec3(rotate_x_mod, 0, 10.f), //eye
-        glm::vec3(0, 3.f, 0), //center
-        glm::vec3(0, 1.0f, 0) //worldup
-    );*/
-
     //light position
     glm::vec3 lightPos = glm::vec3(-10, 3, 0);
     //diff light color
@@ -847,6 +782,13 @@ int main(void)
     );
 
     glBlendEquation(GL_FUNC_ADD);
+
+    Model submarine("3D/plane.obj");
+
+    // Set position, rotation, and scale
+    submarine.setPosition(0.0f, 0.0f, 0.0f);
+    submarine.setRotation(0.0f, 0.0f, 0.0f);
+    submarine.setScale(1.0f, 1.0f, 1.0f);
 
     /* Loop until the user closes the window */
     while (!glfwWindowShouldClose(window))
@@ -996,7 +938,9 @@ int main(void)
         GLuint specPhongAddress = glGetUniformLocation(shaderProg, "specPhong");
         glUniform1f(specPhongAddress, specPhong);
 
-        glDrawArrays(GL_TRIANGLES, 0, fullVertexData.size() / 14);
+        //glDrawArrays(GL_TRIANGLES, 0, fullVertexData.size() / 14);
+        // Draw the model
+        submarine.draw();
 
         /* Swap front and back buffers */
         glfwSwapBuffers(window);
@@ -1007,7 +951,6 @@ int main(void)
 
     glDeleteVertexArrays(1, &VAO);
     glDeleteBuffers(1, &VBO);
-    glDeleteBuffers(1, &EBO);
 
     glfwTerminate();
     return 0;
