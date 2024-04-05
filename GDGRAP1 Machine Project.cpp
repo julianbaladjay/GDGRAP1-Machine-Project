@@ -280,6 +280,113 @@ private:
     
 };
 
+class Shader {
+public:
+    Shader(const std::string& vertexPath, const std::string& fragmentPath) {
+        vertexCode = readFile(vertexPath);
+        fragmentCode = readFile(fragmentPath);
+
+        const char* vShaderCode = vertexCode.c_str();
+        const char* fShaderCode = fragmentCode.c_str();
+
+        // Compile shaders
+        GLuint vertex, fragment;
+        GLint success;
+        GLchar infoLog[512];
+
+        // Vertex Shader
+        vertex = glCreateShader(GL_VERTEX_SHADER);
+        glShaderSource(vertex, 1, &vShaderCode, NULL);
+        glCompileShader(vertex);
+        glGetShaderiv(vertex, GL_COMPILE_STATUS, &success);
+        if (!success) {
+            glGetShaderInfoLog(vertex, 512, NULL, infoLog);
+            std::cout << "Vertex shader compilation failed:\n" << infoLog << std::endl;
+        }
+
+        // Fragment Shader
+        fragment = glCreateShader(GL_FRAGMENT_SHADER);
+        glShaderSource(fragment, 1, &fShaderCode, NULL);
+        glCompileShader(fragment);
+        glGetShaderiv(fragment, GL_COMPILE_STATUS, &success);
+        if (!success) {
+            glGetShaderInfoLog(fragment, 512, NULL, infoLog);
+            std::cout << "Fragment shader compilation failed:\n" << infoLog << std::endl;
+        }
+
+        // Shader Program
+        ID = glCreateProgram();
+        glAttachShader(ID, vertex);
+        glAttachShader(ID, fragment);
+        glLinkProgram(ID);
+        glGetProgramiv(ID, GL_LINK_STATUS, &success);
+        if (!success) {
+            glGetProgramInfoLog(ID, 512, NULL, infoLog);
+            std::cout << "Shader program linking failed:\n" << infoLog << std::endl;
+        }
+
+        // Delete the shaders as they're linked into our program now and no longer necessary
+        glDeleteShader(vertex);
+        glDeleteShader(fragment);
+    }
+
+    // Use the shader
+    void use() {
+        glUseProgram(ID);
+    }
+
+    // Set projection matrix uniform
+    void setProjectionMatrix(const glm::mat4& projectionMatrix) const {
+        glUniformMatrix4fv(glGetUniformLocation(ID, "projection"), 1, GL_FALSE, glm::value_ptr(projectionMatrix));
+    }
+
+    // Set view matrix uniform
+    void setViewMatrix(const glm::mat4& viewMatrix) const {
+        glUniformMatrix4fv(glGetUniformLocation(ID, "view"), 1, GL_FALSE, glm::value_ptr(viewMatrix));
+    }
+
+    // Set transform matrix uniform
+    void setTransformMatrix(const glm::mat4& transformation_matrix) const {
+        glUniformMatrix4fv(glGetUniformLocation(ID, "transform"), 1, GL_FALSE, glm::value_ptr(transformation_matrix));
+    }
+
+    // Set texture uniforms
+    void setTextureUniforms(GLuint texture, GLuint norm_tex) const {
+        glUniform1i(glGetUniformLocation(ID, "tex0"), 0);
+        glUniform1i(glGetUniformLocation(ID, "norm_tex"), 1);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, norm_tex);
+    }
+
+    // Set lighting uniforms
+    void setLightingUniforms(const glm::vec3& lightPos, const glm::vec3& lightColor,
+        float ambientStr, const glm::vec3& ambientColor,
+        const glm::vec3& cameraPos, float specStr, float specPhong) const {
+        glUniform3fv(glGetUniformLocation(ID, "lightPos"), 1, glm::value_ptr(lightPos));
+        glUniform3fv(glGetUniformLocation(ID, "lightColor"), 1, glm::value_ptr(lightColor));
+        glUniform1f(glGetUniformLocation(ID, "ambientStr"), ambientStr);
+        glUniform3fv(glGetUniformLocation(ID, "ambientColor"), 1, glm::value_ptr(ambientColor));
+        glUniform3fv(glGetUniformLocation(ID, "cameraPos"), 1, glm::value_ptr(cameraPos));
+        glUniform1f(glGetUniformLocation(ID, "specStr"), specStr);
+        glUniform1f(glGetUniformLocation(ID, "specPhong"), specPhong);
+    }
+
+private:
+    std::string vertexCode;
+    std::string fragmentCode;
+    GLuint ID;
+
+    std::string readFile(const std::string& path) {
+        std::ifstream file(path);
+        std::stringstream stream;
+        stream << file.rdbuf();
+        file.close();
+        return stream.str();
+    }
+};
+
 void Key_Callback(GLFWwindow* window,
     int key, //keycode of press
     int scancode, //physical position of press
@@ -783,7 +890,10 @@ int main(void)
 
     glBlendEquation(GL_FUNC_ADD);
 
-    Model submarine("3D/plane.obj");
+    Shader shader("Shaders/sample.vert", "Shaders/sample.frag");
+    shader.use();
+
+    Model submarine("3D/Titan Submersible-1.obj");
 
     // Set position, rotation, and scale
     submarine.setPosition(0.0f, 0.0f, 0.0f);
@@ -824,25 +934,8 @@ int main(void)
             glm::normalize(glm::vec3(1.0f, 0.0f, axis_z))
         );
 
-        //rotate_x_mod += 0.05f;
-
-        //projection
-        unsigned int projectionLoc = glGetUniformLocation(shaderProg, "projection");
-
-        glUniformMatrix4fv(projectionLoc, //address of projection variable
-            1, //how many matrices to assign
-            GL_FALSE, //transpose
-            glm::value_ptr(projectionMatrix) //pointer to matrix
-        );
-
-        //camera
-        unsigned int viewLoc = glGetUniformLocation(shaderProg, "view");
-
-        glUniformMatrix4fv(viewLoc, //address of view variable
-            1, //how many matrices to assign
-            GL_FALSE, //transpose
-            glm::value_ptr(viewMatrix) //pointer to matrix
-        );
+        shader.setProjectionMatrix(projectionMatrix);
+        shader.setViewMatrix(viewMatrix);
 
         //disable mask
         glDepthMask(GL_FALSE);
@@ -886,57 +979,12 @@ int main(void)
         //draw other stuff below
         glUseProgram(shaderProg);
 
-        //model translation
-        //get location of transform variable in shader
-        unsigned int transformLoc = glGetUniformLocation(shaderProg, "transform");
-
-        //assign matrix
-        glUniformMatrix4fv(transformLoc, //address of transform variable
-            1, //how many matrices to assign
-            GL_FALSE, //transpose
-            glm::value_ptr(transformation_matrix) //pointer to matrix
-        );
-
         glBindVertexArray(VAO);
 
-        //get location of tex0
-        GLuint tex0Loc = glGetUniformLocation(shaderProg, "tex0");
-        //tell opengl to use textures
-        glBindTexture(GL_TEXTURE_2D, texture);
-        //use texture at 0
-        glUniform1i(tex0Loc, 0);
-
-        // Normal map index
-        glActiveTexture(GL_TEXTURE1);
-        // Get the uniform location for norm_tex
-        GLint tex1Loc = glGetUniformLocation(shaderProg, "norm_tex");
-        // Bind the normal map texture to texture unit 1
-        glBindTexture(GL_TEXTURE_2D, norm_tex);
-        // Pass texture unit index to the shader uniform
-        glUniform1i(tex1Loc, 1);
-
-        //get address of light position from shader
-        GLuint lightAddress = glGetUniformLocation(shaderProg, "lightPos");
-        glUniform3fv(lightAddress, 1, glm::value_ptr(lightPos));
-        //get address of light color from shader
-        GLuint lightColorAddress = glGetUniformLocation(shaderProg, "lightColor");
-        glUniform3fv(lightColorAddress, 1, glm::value_ptr(lightColor));
-
-        //get address of ambient strength from shader
-        GLuint ambientStrAddress = glGetUniformLocation(shaderProg, "ambientStr");
-        glUniform1f(ambientStrAddress, ambientStr);
-        //get address of ambient color from shader
-        GLuint ambientColorAddress = glGetUniformLocation(shaderProg, "ambientColor");
-        glUniform3fv(ambientColorAddress, 1, glm::value_ptr(ambientColor));
-        //get address of camerapos from shader
-        GLuint cameraPosAddress = glGetUniformLocation(shaderProg, "cameraPos");
-        glUniform3fv(cameraPosAddress, 1, glm::value_ptr(cameraPos));
-        //get address of spec str from shader
-        GLuint specStrAddress = glGetUniformLocation(shaderProg, "specStr");
-        glUniform1f(specStrAddress, specStr);
-        //get address of spec phong from shader
-        GLuint specPhongAddress = glGetUniformLocation(shaderProg, "specPhong");
-        glUniform1f(specPhongAddress, specPhong);
+        
+        shader.setTransformMatrix(transformation_matrix);
+        shader.setTextureUniforms(texture, norm_tex);
+        shader.setLightingUniforms(lightPos, lightColor, ambientStr, ambientColor, cameraPos, specStr, specPhong);
 
         //glDrawArrays(GL_TRIANGLES, 0, fullVertexData.size() / 14);
         // Draw the model
