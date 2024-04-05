@@ -1,7 +1,7 @@
 # GDGRAP1 Machine Project
 Checklist:
 3D Models (1 Player Model, 6 Enemy Subs) - Incomplete
-Skybos - Change Shybox Picture to Ocean
+Skybox - Change Shybox Picture to Ocean
 Lighting - Incomplete
 Camera - Incomplete
 Player Input - Incomplete
