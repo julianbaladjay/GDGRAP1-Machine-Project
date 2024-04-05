@@ -326,8 +326,8 @@ public:
         }
 
         // Delete the shaders as they're linked into our program now and no longer necessary
-        glDeleteShader(vertex);
-        glDeleteShader(fragment);
+        //glDeleteShader(vertex);
+        //glDeleteShader(fragment);
     }
 
     // Use the shader
@@ -623,19 +623,8 @@ int main(void)
 
     glfwSetKeyCallback(window, Key_Callback);
 
-    //load vert shader
-    std::fstream vertSrc("Shaders/sample.vert");
-    std::stringstream vertBuff;
-    vertBuff << vertSrc.rdbuf();
-    std::string vertS = vertBuff.str();
-    const char* v = vertS.c_str();
-
-    //load frag shader
-    std::fstream fragSrc("Shaders/sample.frag");
-    std::stringstream fragBuff;
-    fragBuff << fragSrc.rdbuf();
-    std::string fragS = fragBuff.str();
-    const char* f = fragS.c_str();
+    Shader shader("Shaders/sample.vert", "Shaders/sample.frag");
+    shader.use();
 
     //load sky vert shader
     std::fstream skyVertSrc("Shaders/skybox.vert");
@@ -651,45 +640,7 @@ int main(void)
     std::string skyFragS = skyFragBuff.str();
     const char* skyF = skyFragS.c_str();
 
-    //add vertex shader
-    GLuint vertShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertShader, 1, &v, NULL);
-    glCompileShader(vertShader);
-
     GLint isCompiled = 0;
-
-    glGetShaderiv(vertShader, GL_COMPILE_STATUS, &isCompiled);
-    if (isCompiled == GL_FALSE) {
-        GLint maxLength = 0;
-        glGetShaderiv(vertShader, GL_INFO_LOG_LENGTH, &maxLength);
-
-        // The maxLength includes the NULL character
-        std::vector<GLchar> errorLog(maxLength);
-        glGetShaderInfoLog(vertShader, maxLength, &maxLength, &errorLog[0]);
-        std::cout << &errorLog[0];
-        // Provide the infolog in whatever manor you deem best.
-        // Exit with failure.
-        glDeleteShader(vertShader); // Don't leak the shader.
-    }
-
-    //add frag shader
-    GLuint fragShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragShader, 1, &f, NULL);
-    glCompileShader(fragShader);
-
-    glGetShaderiv(fragShader, GL_COMPILE_STATUS, &isCompiled);
-    if (isCompiled == GL_FALSE) {
-        GLint maxLength = 0;
-        glGetShaderiv(fragShader, GL_INFO_LOG_LENGTH, &maxLength);
-
-        // The maxLength includes the NULL character
-        std::vector<GLchar> errorLog(maxLength);
-        glGetShaderInfoLog(fragShader, maxLength, &maxLength, &errorLog[0]);
-        std::cout << &errorLog[0];
-        // Provide the infolog in whatever manor you deem best.
-        // Exit with failure.
-        glDeleteShader(fragShader); // Don't leak the shader.
-    }
 
     //add sky vertex shader
     GLuint skyVertShader = glCreateShader(GL_VERTEX_SHADER);
@@ -728,14 +679,6 @@ int main(void)
         // Exit with failure.
         glDeleteShader(skyFragShader); // Don't leak the shader.
     }
-
-    //create shader program and attach compiled shaders
-    GLuint shaderProg = glCreateProgram();
-    glAttachShader(shaderProg, vertShader);
-    glAttachShader(shaderProg, fragShader);
-
-    //finalize the compilation process
-    glLinkProgram(shaderProg);
 
     GLuint skyShaderProg = glCreateProgram();
     glAttachShader(skyShaderProg, skyVertShader);
@@ -798,9 +741,6 @@ int main(void)
 
     //enable vertices
     glEnableVertexAttribArray(0);
-
-    //tell opengl to use shader for VAOs below
-    glUseProgram(shaderProg);
 
     float x, y, z;
     x = y = z = 0.0f;
@@ -890,9 +830,6 @@ int main(void)
 
     glBlendEquation(GL_FUNC_ADD);
 
-    Shader shader("Shaders/sample.vert", "Shaders/sample.frag");
-    shader.use();
-
     Model submarine("3D/Titan Submersible-1.obj");
 
     // Set position, rotation, and scale
@@ -977,11 +914,10 @@ int main(void)
         glDepthFunc(GL_LESS);
 
         //draw other stuff below
-        glUseProgram(shaderProg);
+        shader.use();
 
         glBindVertexArray(VAO);
 
-        
         shader.setTransformMatrix(transformation_matrix);
         shader.setTextureUniforms(texture, norm_tex);
         shader.setLightingUniforms(lightPos, lightColor, ambientStr, ambientColor, cameraPos, specStr, specPhong);
