@@ -387,6 +387,100 @@ private:
     }
 };
 
+class Camera {
+public:
+    Camera(GLFWwindow* window) : window(window), position(glm::vec3(0.0f, 0.0f, 3.0f)), front(glm::vec3(0.0f, 0.0f, -1.0f)), up(glm::vec3(0.0f, 1.0f, 0.0f)), yaw(-90.0f), pitch(0.0f), movementSpeed(2.5f), mouseSensitivity(0.1f), zoom(45.0f) {
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        glfwSetCursorPosCallback(window, mouse_callback);
+        glfwSetScrollCallback(window, scroll_callback);
+    }
+
+    void processInput(float deltaTime) {
+        float velocity = movementSpeed * deltaTime;
+
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+            position += front * velocity;
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+            position -= front * velocity;
+        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+            position -= glm::normalize(glm::cross(front, up)) * velocity;
+        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+            position += glm::normalize(glm::cross(front, up)) * velocity;
+    }
+
+    void updateCameraVectors() {
+        glm::vec3 front;
+        front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
+        front.y = sin(glm::radians(pitch));
+        front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
+        this->front = glm::normalize(front);
+        right = glm::normalize(glm::cross(front, up));
+        this->up = glm::normalize(glm::cross(right, front));
+    }
+
+    glm::mat4 getViewMatrix() {
+        return glm::lookAt(position, position + front, up);
+    }
+
+    float getZoom() const {
+        return zoom;
+    }
+
+private:
+    static void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
+        static float lastX = 400, lastY = 300;
+        static bool firstMouse = true;
+        if (firstMouse) {
+            lastX = xpos;
+            lastY = ypos;
+            firstMouse = false;
+        }
+
+        float xoffset = xpos - lastX;
+        float yoffset = lastY - ypos; // reversed since y-coordinates range from bottom to top
+        lastX = xpos;
+        lastY = ypos;
+
+        float sensitivity = 0.1f;
+        xoffset *= sensitivity;
+        yoffset *= sensitivity;
+
+        Camera* camera = static_cast<Camera*>(glfwGetWindowUserPointer(window));
+        camera->yaw += xoffset;
+        camera->pitch += yoffset;
+
+        // Make sure that when pitch is out of bounds, screen doesn't get flipped
+        if (camera->pitch > 89.0f)
+            camera->pitch = 89.0f;
+        if (camera->pitch < -89.0f)
+            camera->pitch = -89.0f;
+
+        camera->updateCameraVectors();
+    }
+
+    static void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
+        Camera* camera = static_cast<Camera*>(glfwGetWindowUserPointer(window));
+        camera->zoom -= static_cast<float>(yoffset);
+        if (camera->zoom < 1.0f)
+            camera->zoom = 1.0f;
+        if (camera->zoom > 45.0f)
+            camera->zoom = 45.0f;
+    }
+
+private:
+    GLFWwindow* window;
+    glm::vec3 position;
+    glm::vec3 front;
+    glm::vec3 up;
+    glm::vec3 right;
+    float yaw;
+    float pitch;
+    float movementSpeed;
+    float mouseSensitivity;
+    float zoom;
+};
+
+
 void Key_Callback(GLFWwindow* window,
     int key, //keycode of press
     int scancode, //physical position of press
@@ -416,6 +510,7 @@ void Key_Callback(GLFWwindow* window,
         //move bunny left
         translate_x_mod -= 0.25f;
     }
+
     if (key == GLFW_KEY_RIGHT &&
         (action == GLFW_PRESS || action == GLFW_REPEAT)) {
         //rotate bunny to right
@@ -440,23 +535,23 @@ void Key_Callback(GLFWwindow* window,
     if (key == GLFW_KEY_Q &&
         (action == GLFW_PRESS || action == GLFW_REPEAT)) {
         //decrease scale
-        scale_mod -= 0.2f;
+        scale_mod -= 0.5f;
     }
     if (key == GLFW_KEY_E &&
         (action == GLFW_PRESS || action == GLFW_REPEAT)) {
         //increase scale
-        scale_mod += 0.2f;
+        scale_mod += 0.5f;
     }
     if (key == GLFW_KEY_Z &&
         (action == GLFW_PRESS || action == GLFW_REPEAT)) {
         //zoom bunny in
-        zoom_mod += 0.15f;
+        zoom_mod += 0.30f;
     }
 
     if (key == GLFW_KEY_X &&
         (action == GLFW_PRESS || action == GLFW_REPEAT)) {
         //zoom bunny out
-        zoom_mod -= 0.15f;
+        zoom_mod -= 0.30f;
     }
 }
 
@@ -482,11 +577,6 @@ int main(void)
     /* Make the window's context current */
     glfwMakeContextCurrent(window);
     gladLoadGL();
-
-    /*glViewport(0, //min x
-        0, //min y
-        640, //x
-        480); //y */
 
     int img_width, //texture width
         img_height, //texture height
@@ -832,6 +922,8 @@ int main(void)
 
     Model submarine("3D/Titan Submersible-1.obj");
 
+    Camera camera(window);
+
     // Set position, rotation, and scale
     submarine.setPosition(0.0f, 0.0f, 0.0f);
     submarine.setRotation(0.0f, 0.0f, 0.0f);
@@ -848,6 +940,8 @@ int main(void)
         z = zoom_mod;
         theta = rotate_x_mod;
         axis_y = rotate_y_mod;
+
+        //camera.processInput(0.1f);
 
         glm::mat4 transformation_matrix = glm::translate(
             identity_matrix4,
@@ -921,6 +1015,8 @@ int main(void)
         shader.setTransformMatrix(transformation_matrix);
         shader.setTextureUniforms(texture, norm_tex);
         shader.setLightingUniforms(lightPos, lightColor, ambientStr, ambientColor, cameraPos, specStr, specPhong);
+
+        
 
         //glDrawArrays(GL_TRIANGLES, 0, fullVertexData.size() / 14);
         // Draw the model
