@@ -70,6 +70,7 @@ public:
         glBindVertexArray(0);
     }
 
+
 private:
 
     void loadModel(const std::string& path) {
@@ -390,9 +391,7 @@ private:
 class Camera {
 public:
     Camera(GLFWwindow* window) : window(window), position(glm::vec3(0.0f, 0.0f, 3.0f)), front(glm::vec3(0.0f, 0.0f, -1.0f)), up(glm::vec3(0.0f, 1.0f, 0.0f)), yaw(-90.0f), pitch(0.0f), movementSpeed(2.5f), mouseSensitivity(0.1f), zoom(45.0f) {
-        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-        glfwSetCursorPosCallback(window, mouse_callback);
-        glfwSetScrollCallback(window, scroll_callback);
+        this->updateCameraVectors();
     }
 
     void processInput(float deltaTime) {
@@ -426,7 +425,7 @@ public:
         return zoom;
     }
 
-private:
+public:
     static void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
         static float lastX = 400, lastY = 300;
         static bool firstMouse = true;
@@ -446,6 +445,10 @@ private:
         yoffset *= sensitivity;
 
         Camera* camera = static_cast<Camera*>(glfwGetWindowUserPointer(window));
+        if (camera == nullptr) {
+            // Handle null pointer error
+            return;
+        }
         camera->yaw += xoffset;
         camera->pitch += yoffset;
 
@@ -460,6 +463,10 @@ private:
 
     static void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
         Camera* camera = static_cast<Camera*>(glfwGetWindowUserPointer(window));
+        if (camera == nullptr) {
+            // Handle null pointer error
+            return;
+        }
         camera->zoom -= static_cast<float>(yoffset);
         if (camera->zoom < 1.0f)
             camera->zoom = 1.0f;
@@ -481,7 +488,7 @@ private:
 };
 
 
-void Key_Callback(GLFWwindow* window,
+void Key_Callback(GLFWwindow * window,
     int key, //keycode of press
     int scancode, //physical position of press
     int action, //press or release
@@ -567,7 +574,7 @@ int main(void)
     float window_height = 800.0f;
 
     /* Create a windowed mode window and its OpenGL context */
-    window = glfwCreateWindow(window_width, window_height, "Hello World", NULL, NULL);
+    window = glfwCreateWindow(window_width, window_height, "MachineProject", NULL, NULL);
     if (!window)
     {
         glfwTerminate();
@@ -711,7 +718,13 @@ int main(void)
 
     glEnable(GL_DEPTH_TEST);
 
+    Camera camera(window);
+
     glfwSetKeyCallback(window, Key_Callback);
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    glfwSetCursorPosCallback(window, camera.mouse_callback);
+    glfwSetScrollCallback(window, camera.scroll_callback);
+    glfwSetWindowUserPointer(window, &camera);
 
     Shader shader("Shaders/sample.vert", "Shaders/sample.frag");
     shader.use();
@@ -922,8 +935,6 @@ int main(void)
 
     Model submarine("3D/Titan Submersible-1.obj");
 
-    Camera camera(window);
-
     // Set position, rotation, and scale
     submarine.setPosition(0.0f, 0.0f, 0.0f);
     submarine.setRotation(0.0f, 0.0f, 0.0f);
@@ -931,7 +942,10 @@ int main(void)
 
     /* Loop until the user closes the window */
     while (!glfwWindowShouldClose(window))
-    {
+    {  
+        /* Poll for and process events */
+        glfwPollEvents();
+
         /* Render here */
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -1024,9 +1038,6 @@ int main(void)
 
         /* Swap front and back buffers */
         glfwSwapBuffers(window);
-
-        /* Poll for and process events */
-        glfwPollEvents();
     }
 
     glDeleteVertexArrays(1, &VAO);
