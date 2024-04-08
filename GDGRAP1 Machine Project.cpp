@@ -16,6 +16,7 @@ float rotate_x_mod = 0.f;
 float rotate_y_mod = 1.f;
 float scale_mod = 1.f;
 float zoom_mod = -5.f;
+int activeModelIndex = 0;
 
 class Model {
 public:
@@ -494,6 +495,7 @@ void Key_Callback(GLFWwindow * window,
     int action, //press or release
     int mods) //modifier keys
 {
+
     if (key == GLFW_KEY_W &&
         (action == GLFW_PRESS || action == GLFW_REPEAT)) {
         //move bunny up
@@ -664,12 +666,12 @@ int main(void)
 
     //load skybox textures
     std::string facesSkybox[]{
-        "Skybox/rainbow_rt.png", //right
-        "Skybox/rainbow_lf.png", //left
-        "Skybox/rainbow_up.png", //up
-        "Skybox/rainbow_dn.png", //down
-        "Skybox/rainbow_ft.png", //front
-        "Skybox/rainbow_bk.png"  //back
+        "Skybox/nightocean_rt.png", //right
+        "Skybox/nightocean_lf.png", //left
+        "Skybox/nightocean_up.png", //up
+        "Skybox/nightocean_dn.png", //down
+        "Skybox/nightocean_ft.png", //front
+        "Skybox/nightocean_bk.png"  //back
     };
 
     //initialize skybox texture
@@ -701,11 +703,11 @@ int main(void)
                 // right to left to top to bottom to front to back
                 GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
                 0,
-                GL_RGB,
+                GL_RGBA,
                 w,
                 h,
                 0,
-                GL_RGB,
+                GL_RGBA,
                 GL_UNSIGNED_BYTE,
                 data
             );
@@ -934,11 +936,16 @@ int main(void)
     glBlendEquation(GL_FUNC_ADD);
 
     Model submarine("3D/Titan Submersible-1.obj");
+    Model brickwall("3D/plane.obj");
 
     // Set position, rotation, and scale
     submarine.setPosition(0.0f, 0.0f, 0.0f);
     submarine.setRotation(0.0f, 0.0f, 0.0f);
     submarine.setScale(1.0f, 1.0f, 1.0f);
+
+    brickwall.setPosition(-10.0f, 3.0f, 0.0f);
+    brickwall.setRotation(0.0f, 0.0f, 0.0f);
+    brickwall.setScale(1.0f, 1.0f, 1.0f);
 
     /* Loop until the user closes the window */
     while (!glfwWindowShouldClose(window))
@@ -1035,6 +1042,7 @@ int main(void)
         //glDrawArrays(GL_TRIANGLES, 0, fullVertexData.size() / 14);
         // Draw the model
         submarine.draw();
+        brickwall.draw();
 
         /* Swap front and back buffers */
         glfwSwapBuffers(window);
