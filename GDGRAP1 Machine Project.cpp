@@ -913,7 +913,7 @@ int main(void)
     glm::mat4 viewMatrix = cameraOrientation * cameraPositionMatrix;
 
     //light position
-    glm::vec3 lightPos = glm::vec3(-10, 3, 0);
+    glm::vec3 lightPos = glm::vec3(0, 0, 0);
     //diff light color
     glm::vec3 lightColor = glm::vec3(2, 2, 2);
     //ambient strength
